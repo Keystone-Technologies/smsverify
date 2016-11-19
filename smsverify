@@ -1,0 +1,80 @@
+#!/usr/bin/env perl
+use Mojolicious::Lite;
+
+use lib '/var/mojo/kit/smsverify/lib';
+
+sub pin {
+  my @Chars = ('1'..'9');
+  my $Length = 4;
+  my $Number = '';
+
+  for (1..$Length) {
+  $Number .= $Chars[int rand @Chars];
+  }
+
+  return $Number;
+}
+
+plugin 'Config';
+plugin OAuth2Accounts => {
+  on_logout => '/',
+  on_success => 'index',
+  on_error => 'error',
+  on_connect => sub {
+    my $c = shift;
+    if ( $#_ == 1 ) {
+      return undef;
+    } elsif ( $#_ == 0 ) {
+      return pin();
+    } elsif ( $#_ > 1 ) {
+      $c->session->{email} = $_[-1]->{email} if $_[-1]->{email} =~ /\@keystonetechnologies\.com$/;
+      #$c->app->log->info(B => Data::Dumper::Dumper($c->session));
+    }
+   },
+  providers => app->config->{oauth2},
+};
+
+get '/' => sub {
+  my $c = shift;
+  return $c->redirect_to('/connect/google') unless $c->session('id');
+  return $c->reply->not_found unless $c->session('email');
+} => 'index';
+
+# TODO: Convert this to AJAX
+post '/verify' => sub {
+  my $c = shift;
+  my $pin = pin();
+  my $number = $c->param('number');
+  $number = "1$number" if length($number) == 10;
+  my $tx = $c->ua->get('https://rest.nexmo.com/sc/us/2fa/json', form => {%{app->config->{nexmo}}, to => $number, pin => $pin});
+  $c->render(pin => $pin, tx => $tx);
+};
+
+app->start;
+__DATA__
+
+@@ index.html.ep
+% layout 'default';
+% title 'Veryify SMS';
+%= form_for 'verify' => begin
+  %= text_field 'number'
+  %= submit_button 'Send Verification SMS'
+% end
+
+@@ verify.html.ep
+% layout 'default';
+% title 'Verify SMS';
+Your Keystone code is <%= $pin %>
+
+@@ layouts/default.html.ep
+<!DOCTYPE html>
+<html>
+  <head><title><%= title %></title></head>
+  <body>
+    Hello, <%= session 'email' %>
+    <hr>
+    <%= content %>
+    <hr>
+    %= link_to Logout => 'logout'
+  </body>
+</html>
