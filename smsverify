@@ -1,8 +1,6 @@
 #!/usr/bin/env perl
 use Mojolicious::Lite;
 
-use lib '/var/mojo/kit/smsverify/lib';
-
 sub pin {
   my @Chars = ('1'..'9');
   my $Length = 4;
@@ -15,39 +13,47 @@ sub pin {
   return $Number;
 }
 
+app->defaults(color => 'sky'); # bold bright earthy sky
+
 plugin 'Config';
-plugin OAuth2Accounts => {
-  on_logout => '/',
-  on_success => 'index',
-  on_error => 'error',
-  on_connect => sub {
-    my $c = shift;
-    if ( $#_ == 1 ) {
-      return undef;
-    } elsif ( $#_ == 0 ) {
-      return pin();
-    } elsif ( $#_ > 1 ) {
-      $c->session->{email} = $_[-1]->{email} if $_[-1]->{email} =~ /\@keystonetechnologies\.com$/;
-      #$c->app->log->info(B => Data::Dumper::Dumper($c->session));
-    }
-   },
-  providers => app->config->{oauth2},
-};
+#plugin OAuth2Accounts => {
+#  on_logout => '/',
+#  on_success => 'index',
+#  on_error => 'error',
+#  on_connect => sub {
+#    my $c = shift;
+#    if ( $#_ == 1 ) {
+#      return undef;
+#    } elsif ( $#_ == 0 ) {
+#      return pin();
+#    } elsif ( $#_ > 1 ) {
+#      $c->session->{email} = $_[-1]->{email} if $_[-1]->{email} =~ /\@keystonetechnologies\.com$/;
+#      #$c->app->log->info(B => Data::Dumper::Dumper($c->session));
+#    }
+#   },
+#  providers => app->config->{oauth2},
+#};
 
 get '/' => sub {
   my $c = shift;
-  return $c->redirect_to('/connect/google') unless $c->session('id');
-  return $c->reply->not_found unless $c->session('email');
+  #return $c->redirect_to('/connect/google') unless $c->session('id');
+  #return $c->reply->not_found unless $c->session('email');
 } => 'index';
 
-# TODO: Convert this to AJAX
+#get '/verify' => sub {
+#  my $c = shift;
+#  $c->render(json => {headers => $c->req->headers->to_hash, params => $c->req->params->to_hash, query => $c->req->query_params->to_hash});
+#};
+
+# TODO: Add Auth
 post '/verify' => sub {
   my $c = shift;
+  #$c->reply->not_found and return unless $c->req->headers->referrer eq 'https://ww5.autotask.net/autotask/AutotaskExtend/livelinks/livelink_ExecuteFormPost.aspx'; # && $c->param('token') eq $c->app->config('livelink_token');
   my $pin = pin();
-  my $number = $c->param('number');
+  my $number = $c->param('contactnumber');
   $number = "1$number" if length($number) == 10;
-  my $tx = $c->ua->get('https://rest.nexmo.com/sc/us/2fa/json', form => {%{app->config->{nexmo}}, to => $number, pin => $pin});
-  $c->render(pin => $pin, tx => $tx);
+  #my $tx = $c->ua->get('https://rest.nexmo.com/sc/us/2fa/json', form => {%{app->config->{nexmo}}, to => $number, pin => $pin});
+  $c->render(pin => $pin);#, tx => $tx);
 };
 
 app->start;
@@ -64,17 +70,31 @@ __DATA__
 @@ verify.html.ep
 % layout 'default';
 % title 'Verify SMS';
-Your Keystone code is <%= $pin %>
+% content navigation => '';
+%# Internal pages probably don't have a headline or main_form, so unset them
+% content headline => begin
+<p class="headline">Verify Who's Calling!</p>
+<h2>Here's Why You Need This:</h2>
+<p>Send a random code to the contact's mobile phone so that you can verify this person is who they say they are.</p>
+% end
+% content main_form => begin
+<div class="feature-box">
+<p>This system is currently a prototype and does <i>not</i> actually send an SMS as it says that it does.  Feel free to use this for demo purposes as much as you like and rest assured you'll be bothering no persons.</p>
+</div>
+% end
+%# Uncomment and provide content for these or else default Lorem ipsum will be rendered
+% content overlay => begin
+<br><br><br>
+<h2>Verification Token</h2>
+<p>Sent Keystone code <%= $pin %> to <%= param 'firstname' %> <%= param 'lastname' %> at <%= param 'contactnumber' %></p>
+<p><%= param 'firstname' %> is authorized for level [x] which means these things ____.</p>
+<p>For any requests that <%= param 'firstname' %> is not authorized for, direct them to (or contact) one of these these key contacts [key contacts | primary contact]</p>
+% end
+% content solid => '';
 
-@@ layouts/default.html.ep
-<!DOCTYPE html>
-<html>
-  <head><title><%= title %></title></head>
-  <body>
-    Hello, <%= session 'email' %>
-    <hr>
-    <%= content %>
-    <hr>
-    %= link_to Logout => 'logout'
-  </body>
-</html>
+@@ undef
+% content solid => begin
+<pre>
+%= dumper {headers => $c->req->headers->to_hash, params => $c->req->params->to_hash, query => $c->req->query_params->to_hash}
+</pre>
+% end
